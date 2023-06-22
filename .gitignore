@@ -1,0 +1,5 @@
+build
+test.db
+out
+.vs
+.vscode

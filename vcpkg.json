@@ -1,0 +1,18 @@
+{
+	"$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+	"name": "app-faculdade",
+	"version-string": "0.0.1",
+	"license": "MIT",
+	"dependencies": [
+		{
+			"name": "imgui",
+			"features": [
+				"docking-experimental",
+				"opengl3-binding",
+				"glfw-binding"
+			]
+		},
+		"sqlite-orm",
+		"glew"
+	]
+}
