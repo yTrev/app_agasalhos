@@ -72,7 +72,7 @@ void formatPhoneNumber(char* numero) {
   }
 
   // Copia o número formatado para o parâmetro original
-  strncpy(numero, new_phone.c_str(), new_phone.length() + 1);
+  strncpy_s(numero, 16, new_phone.c_str(), new_phone.length() + 1);
 }
 
 void formatDate(char* data) {
@@ -89,6 +89,18 @@ void formatDate(char* data) {
   // Aplica o formato "DD/MM/YYYY"
   snprintf(data, 11, "%s/%s/%s", dataLimpa.substr(0, 2).c_str(),
            dataLimpa.substr(2, 2).c_str(), dataLimpa.substr(4).c_str());
+}
+
+bool validatePhone(const char* phone) {
+  std::regex reg("\\(\\d{2}\\)\\s\\d{5}-\\d{4}");
+
+  return std::regex_match(phone, reg);
+}
+
+bool validateDate(const char* date) {
+  std::regex reg("\\d{2}/\\d{2}/\\d{4}");
+
+  return std::regex_match(date, reg);
 }
 
 inline auto initStorage(const std::string& path) {
@@ -131,7 +143,7 @@ class App : public AppBase<App> {
                      ImGuiWindowFlags_AlwaysAutoResize |
                      ImGuiWindowFlags_NoBackground);
 
-    if (ImGui::BeginTabBar("##tabs")) {
+    if (ImGui::BeginTabBar("##tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
       if (ImGui::BeginTabItem("Cadastrar")) {
         ImGui::Text("Dados pessoais");
         ImGui::Separator();
@@ -154,7 +166,7 @@ class App : public AppBase<App> {
         ImGui::SameLine();
         ImGui::Text("Número de Telefone*");
 
-        ImGui::Text("Dados do agasalho");
+        ImGui::Text("Informações do agasalho");
         ImGui::Separator();
 
         // Pegar a data atual
@@ -228,9 +240,8 @@ class App : public AppBase<App> {
 
         if (ImGui::Button("Registrar doação")) {
           // Verificar se os campos obrigatórios foram preenchidos
-          // TODO: Ao invés de apenas verificar se os campos estão vazios,
-          // verificar se os campos estão no formato correto
-          if (strlen(nome) == 0 || strlen(telefone) == 0 || strlen(data) == 0) {
+          if (strlen(nome) == 0 || !validatePhone(telefone) ||
+              !validateDate(data)) {
             ImGui::OpenPopup("Campos obrigatórios");
 
           } else {
@@ -277,9 +288,14 @@ class App : public AppBase<App> {
       // Nessa aba, o usuário pode ver os agasalhos disponíveis para doação
       // e marcar como doado aqueles que foram doados
       if (ImGui::BeginTabItem("Estoque de agasalhos")) {
-        const auto rows = stor->select(object<Doacao>());
+        static bool apenas_disponiveis = true;
 
-        ImGui::Columns(5, "doacoes");
+        ImGui::Checkbox("##agasalhos_disponiveis", &apenas_disponiveis);
+        ImGui::SameLine();
+        ImGui::Text("Exibir apenas agasalhos disponíveis");
+
+        const auto rows = stor->select(object<Doacao>());
+        ImGui::Columns(6, "doacoes");
         ImGui::Separator();
         ImGui::Text("Data da doação");
         ImGui::NextColumn();
@@ -289,13 +305,17 @@ class App : public AppBase<App> {
         ImGui::NextColumn();
         ImGui::Text("Descrição");
         ImGui::NextColumn();
+        ImGui::Text("Doador");
+        ImGui::NextColumn();
         ImGui::Text("Status");
         ImGui::NextColumn();
 
         for (auto& doacao : rows) {
-          if (doacao.status == "Doado") {
+          if (apenas_disponiveis && doacao.status == "Doado") {
             continue;
           };
+
+          ImGui::PushID(doacao.id);
 
           ImGui::Text(doacao.data.c_str());
           ImGui::NextColumn();
@@ -313,10 +333,13 @@ class App : public AppBase<App> {
 
           ImGui::NextColumn();
 
+          auto doador = stor->get<Doador>(*doacao.id_doador);
+
+          ImGui::Text(doador.nome.c_str());
+          ImGui::NextColumn();
+
           const char* row_status = doacao.status.c_str();
           const char* status[] = {"Disponível", "Doado"};
-
-          ImGui::PushID(doacao.id);
 
           // Cria um combo para permitir alterar o status da doação
           if (ImGui::BeginCombo("##status", row_status)) {
@@ -336,10 +359,45 @@ class App : public AppBase<App> {
             ImGui::EndCombo();
           };
 
+          ImGui::SameLine();
+
+          // Abrir Popup para confirmar a exclusão da doação
+          if (ImGui::SmallButton("X")) {
+            ImGui::OpenPopup("Deletar?");
+          };
+
+          // Centralizar o popup
+          ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+          ImGui::SetNextWindowPos(center, ImGuiCond_Appearing,
+                                  ImVec2(0.5f, 0.5f));
+
+          // Popup para confirmar a exclusão da doação
+          if (ImGui::BeginPopupModal("Deletar?", NULL,
+                                     ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text("Tem certeza que deseja deletar a doação?");
+
+            if (ImGui::Button("OK", ImVec2(120, 0))) {
+              stor->remove<Doacao>(doacao.id);
+
+              ImGui::CloseCurrentPopup();
+            };
+
+            ImGui::SetItemDefaultFocus();
+            ImGui::SameLine();
+
+            if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+              ImGui::CloseCurrentPopup();
+            };
+
+            ImGui::EndPopup();
+          };
+
           ImGui::PopID();
 
           ImGui::NextColumn();
         };
+
+        ImGui::Columns(1);
 
         ImGui::EndTabItem();
       };
@@ -370,6 +428,8 @@ class App : public AppBase<App> {
           ImGui::Text("%d", doacoes);
           ImGui::NextColumn();
         };
+
+        ImGui::Columns(1);
 
         ImGui::EndTabItem();
       };
