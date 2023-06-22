@@ -228,14 +228,27 @@ class App : public AppBase<App> {
 
         if (ImGui::Button("Registrar doação")) {
           // Verificar se os campos obrigatórios foram preenchidos
+          // TODO: Ao invés de apenas verificar se os campos estão vazios,
+          // verificar se os campos estão no formato correto
           if (strlen(nome) == 0 || strlen(telefone) == 0 || strlen(data) == 0) {
             ImGui::OpenPopup("Campos obrigatórios");
 
           } else {
-            // Registrar doação
+            // Registrar nova doação, e criar um novo doador se necessário
+            // Verificar se um doador com o mesmo email já existe
+            auto doadores_com_mesmo_email = stor->get_all<Doador>(
+                where(c(&Doador::telefone) == std::string(telefone)));
 
-            Doador doador{-1, nome, telefone};
-            doador.id = stor->insert(doador);
+            int doador_id = -1;
+
+            if (doadores_com_mesmo_email.empty()) {
+              // O doador não existe, então vamos criar um novo
+              Doador doador{-1, nome, telefone};
+              doador_id = stor->insert(doador);
+            } else {
+              // O doador já existe, então vamos usar o doador existente
+              doador_id = doadores_com_mesmo_email[0].id;
+            }
 
             Doacao doacao{
                 -1,
@@ -244,7 +257,7 @@ class App : public AppBase<App> {
                 condicao_selecionada,
                 "Disponível",
                 descricao,
-                std::make_unique<int>(doador.id),
+                std::make_unique<int>(doador_id),
             };
 
             stor->insert(doacao);
@@ -261,9 +274,9 @@ class App : public AppBase<App> {
         ImGui::EndTabItem();
       }
 
-      if (ImGui::BeginTabItem("Doações")) {
-        // Cria uma tabela mostrando todas as doações
-        // registradas Com opção de editar e excluir
+      // Nessa aba, o usuário pode ver os agasalhos disponíveis para doação
+      // e marcar como doado aqueles que foram doados
+      if (ImGui::BeginTabItem("Estoque de agasalhos")) {
         const auto rows = stor->select(object<Doacao>());
 
         ImGui::Columns(5, "doacoes");
@@ -280,7 +293,6 @@ class App : public AppBase<App> {
         ImGui::NextColumn();
 
         for (auto& doacao : rows) {
-          // Mostrar apenas as doações disponíveis
           if (doacao.status == "Doado") {
             continue;
           };
@@ -330,7 +342,37 @@ class App : public AppBase<App> {
         };
 
         ImGui::EndTabItem();
-      }
+      };
+
+      // Nessa aba, o usuário pode ver os doadores e quantidade de doações
+      if (ImGui::BeginTabItem("Doadores")) {
+        const auto rows = stor->select(object<Doador>());
+
+        ImGui::Columns(3, "doadores");
+        ImGui::Separator();
+        ImGui::Text("Nome");
+        ImGui::NextColumn();
+        ImGui::Text("Telefone");
+        ImGui::NextColumn();
+        ImGui::Text("Total de doações");
+        ImGui::NextColumn();
+
+        for (auto& doador : rows) {
+          ImGui::Text(doador.nome.c_str());
+          ImGui::NextColumn();
+          ImGui::Text(doador.telefone.c_str());
+          ImGui::NextColumn();
+
+          // Conta quantas doações o doador fez
+          const auto doacoes =
+              stor->count<Doacao>(where(c(&Doacao::id_doador) == doador.id));
+
+          ImGui::Text("%d", doacoes);
+          ImGui::NextColumn();
+        };
+
+        ImGui::EndTabItem();
+      };
 
       // Apenas algumas informações sobre o projeto
       if (ImGui::BeginTabItem("Sobre")) {
